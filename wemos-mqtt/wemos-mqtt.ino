@@ -72,15 +72,16 @@ bool colorfade = false;
 int currentColor = 0;
 // {red, grn, blu, wht}
 const byte colors[][4] = {
-  {255, 0, 0, 0},
-  {0, 255, 0, 0},
-  {0, 0, 255, 0},
-  {255, 80, 0, 0},
-  {163, 0, 255, 0},
-  {0, 255, 255, 0},
-  {255, 255, 0, 0}
+  {255, 255, 255, -1},
+  {255, 0, 0, -1},
+  {0, 255, 0, -1},
+  {0, 0, 255, -1},
+  {255, 80, 0, -1},
+  {163, 0, 255, -1},
+  {0, 255, 255, -1},
+  {255, 255, 0, -1}
 };
-const int numColors = 7;
+const int numColors = 8;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -89,14 +90,16 @@ DHT_Unified dht(CONFIG_DHT_PIN, DHTTYPE);
 unsigned long lastSampleTime = 0;
 
 void setup() {
-  if (rgb) {
-    pinMode(CONFIG_PIN_RED, OUTPUT);
-    pinMode(CONFIG_PIN_GREEN, OUTPUT);
-    pinMode(CONFIG_PIN_BLUE, OUTPUT);
+  if (CONFIG_DEBUG) {
+    Serial.begin(115200);
   }
-  if (includeWhite) {
-    pinMode(CONFIG_PIN_WHITE, OUTPUT);
-  }
+
+  pinMode(CONFIG_PIN_RED, OUTPUT);
+  pinMode(CONFIG_PIN_GREEN, OUTPUT);
+  pinMode(CONFIG_PIN_BLUE, OUTPUT);
+  pinMode(CONFIG_PIN_WHITE, OUTPUT);
+
+  analogWriteRange(255);
 
   // Set the BUILTIN_LED based on the CONFIG_BUILTIN_LED_MODE
   switch (CONFIG_BUILTIN_LED_MODE) {
@@ -112,57 +115,23 @@ void setup() {
       break;
   }
 
-  analogWriteRange(255);
-
-  if (CONFIG_DEBUG) {
-    Serial.begin(115200);
-  }
-
   setup_wifi();
   client.setServer(CONFIG_MQTT_HOST, CONFIG_MQTT_PORT);
   client.setCallback(callback);
 
   // Set up the DHT sensor
   dht.begin();
-
-  if (CONFIG_DEBUG) {
-    printSensorDetails();
-  }
-}
-
-void printSensorDetails() {
-  // Print the sensor details
-  // Print temperature sensor details.
-  sensor_t sensor;
-  dht.temperature().getSensor(&sensor);
-  Serial.println("------------------------------------");
-  Serial.println("Temperature");
-  Serial.print  ("Sensor:       "); Serial.println(sensor.name);
-  Serial.print  ("Driver Ver:   "); Serial.println(sensor.version);
-  Serial.print  ("Unique ID:    "); Serial.println(sensor.sensor_id);
-  Serial.print  ("Max Value:    "); Serial.print(sensor.max_value); Serial.println(" *C");
-  Serial.print  ("Min Value:    "); Serial.print(sensor.min_value); Serial.println(" *C");
-  Serial.print  ("Resolution:   "); Serial.print(sensor.resolution); Serial.println(" *C");
-  Serial.println("------------------------------------");
-  // Print humidity sensor details.
-  dht.humidity().getSensor(&sensor);
-  Serial.println("------------------------------------");
-  Serial.println("Humidity");
-  Serial.print  ("Sensor:       "); Serial.println(sensor.name);
-  Serial.print  ("Driver Ver:   "); Serial.println(sensor.version);
-  Serial.print  ("Unique ID:    "); Serial.println(sensor.sensor_id);
-  Serial.print  ("Max Value:    "); Serial.print(sensor.max_value); Serial.println("%");
-  Serial.print  ("Min Value:    "); Serial.print(sensor.min_value); Serial.println("%");
-  Serial.print  ("Resolution:   "); Serial.print(sensor.resolution); Serial.println("%");
-  Serial.println("------------------------------------");
 }
 
 void setup_wifi() {
   delay(10);
   // We start by connecting to a WiFi network
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(CONFIG_WIFI_SSID);
+
+  if (CONFIG_DEBUG) {
+    Serial.println();
+    Serial.print("Connecting to ");
+    Serial.println(CONFIG_WIFI_SSID);
+  }
 
   WiFi.mode(WIFI_STA); // Disable the built-in WiFi access point.
   WiFi.begin(CONFIG_WIFI_SSID, CONFIG_WIFI_PASS);
@@ -172,10 +141,12 @@ void setup_wifi() {
     Serial.print(".");
   }
 
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
+  if (CONFIG_DEBUG) {
+    Serial.println("");
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+  }
 }
 
 /*
@@ -203,9 +174,11 @@ void setup_wifi() {
   }
 */
 void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("Message arrived [");
-  Serial.print(topic);
-  Serial.print("] ");
+  if (CONFIG_DEBUG) {
+    Serial.print("Message arrived [");
+    Serial.print(topic);
+    Serial.println("] ");
+  }
 
   char message[length + 1];
   for (int i = 0; i < length; i++) {
@@ -286,17 +259,9 @@ bool processJson(char* message) {
       flashBlue = blue;
     }
 
-    if (includeWhite && root.containsKey("white_value")) {
-      flashWhite = root["white_value"];
-    }
-    else {
-      flashWhite = white;
-    }
-
     flashRed = map(flashRed, 0, 255, 0, flashBrightness);
     flashGreen = map(flashGreen, 0, 255, 0, flashBrightness);
     flashBlue = map(flashBlue, 0, 255, 0, flashBrightness);
-    flashWhite = map(flashWhite, 0, 255, 0, flashBrightness);
 
     flash = true;
     startFlash = true;
@@ -353,28 +318,22 @@ void sendState() {
   JsonObject& root = jsonBuffer.createObject();
 
   root["state"] = (stateOn) ? CONFIG_MQTT_PAYLOAD_ON : CONFIG_MQTT_PAYLOAD_OFF;
-  if (rgb) {
-    JsonObject& color = root.createNestedObject("color");
-    color["r"] = red;
-    color["g"] = green;
-    color["b"] = blue;
-  }
+  
+  JsonObject& color = root.createNestedObject("color");
+  color["r"] = red;
+  color["g"] = green;
+  color["b"] = blue;
 
   root["brightness"] = brightness;
-
-  if (includeWhite) {
-    root["white_value"] = white;
-  }
+  root["white_value"] = white;
 
   if (rgb && colorfade) {
     if (transitionTime == CONFIG_COLORFADE_TIME_SLOW) {
       root["effect"] = "colorfade_slow";
-    }
-    else {
+    } else {
       root["effect"] = "colorfade_fast";
     }
-  }
-  else {
+  } else {
     root["effect"] = "null";
   }
 
@@ -411,34 +370,27 @@ void setColor(int inR, int inG, int inB, int inW) {
     inW = (255 - inW);
   }
 
-  if (rgb) {
-    analogWrite(CONFIG_PIN_RED, inR);
-    analogWrite(CONFIG_PIN_GREEN, inG);
-    analogWrite(CONFIG_PIN_BLUE, inB);
-  }
+  analogWrite(CONFIG_PIN_RED, inR);
+  analogWrite(CONFIG_PIN_GREEN, inG);
+  analogWrite(CONFIG_PIN_BLUE, inB);
 
-  if (includeWhite) {
+  if (inW > -1) {
     analogWrite(CONFIG_PIN_WHITE, inW);
   }
 
   if (CONFIG_DEBUG) {
     Serial.print("Setting LEDs: {");
-    if (rgb) {
-      Serial.print("r: ");
-      Serial.print(inR);
-      Serial.print(" , g: ");
-      Serial.print(inG);
-      Serial.print(" , b: ");
-      Serial.print(inB);
-    }
 
-    if (includeWhite) {
-      if (rgb) {
-        Serial.print(", ");
-      }
-      Serial.print("w: ");
-      Serial.print(inW);
-    }
+    Serial.print("r: ");
+    Serial.print(inR);
+    Serial.print(" , g: ");
+    Serial.print(inG);
+    Serial.print(" , b: ");
+    Serial.print(inB);
+
+    Serial.print(", ");
+    Serial.print("w: ");
+    Serial.print(inW);
 
     Serial.println("}");
   }
@@ -485,25 +437,21 @@ void loop() {
 
     if ((millis() - flashStartTime) <= flashLength) {
       if ((millis() - flashStartTime) % 1000 <= 500) {
-        setColor(flashRed, flashGreen, flashBlue, flashWhite);
-      }
-      else {
-        setColor(0, 0, 0, 0);
+        setColor(flashRed, flashGreen, flashBlue, -1);
+      } else {
+        setColor(0, 0, 0, -1);
         // If you'd prefer the flashing to happen "on top of"
         // the current color, uncomment the next line.
         // setColor(realRed, realGreen, realBlue, realWhite);
       }
-    }
-    else {
+    } else {
       flash = false;
       setColor(realRed, realGreen, realBlue, realWhite);
     }
-  }
-  else if (rgb && colorfade && !inFade) {
+  } else if (rgb && colorfade && !inFade) {
     realRed = map(colors[currentColor][0], 0, 255, 0, brightness);
     realGreen = map(colors[currentColor][1], 0, 255, 0, brightness);
     realBlue = map(colors[currentColor][2], 0, 255, 0, brightness);
-    realWhite = map(colors[currentColor][3], 0, 255, 0, brightness);
     currentColor = (currentColor + 1) % numColors;
     startFade = true;
   }
@@ -519,8 +467,7 @@ void loop() {
       whtVal = realWhite;
 
       startFade = false;
-    }
-    else {
+    } else {
       loopCount = 0;
       stepR = calculateStep(redVal, realRed);
       stepG = calculateStep(grnVal, realGreen);

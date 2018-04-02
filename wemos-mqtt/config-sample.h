@@ -53,7 +53,7 @@ enum strip {
 // Default number of flashes if no value was given
 #define CONFIG_DEFAULT_FLASH_LENGTH 2
 // Number of seconds for one transition in colorfade mode
-#define CONFIG_COLORFADE_TIME_SLOW 10
+#define CONFIG_COLORFADE_TIME_SLOW 15
 #define CONFIG_COLORFADE_TIME_FAST 3
 
 // Reverse the LED logic
