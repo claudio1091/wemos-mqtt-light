@@ -17,6 +17,7 @@
 #include <ArduinoJson.h>
 
 #include <ESP8266WiFi.h>
+#include <FirebaseArduino.h>
 
 // http://pubsubclient.knolleary.net/
 #include <PubSubClient.h>
@@ -107,6 +108,8 @@ void setup() {
 
   // Set up the DHT sensor
   dht.begin();
+
+  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
 
   pinMode(BUILTIN_LED, OUTPUT);
   digitalWrite(BUILTIN_LED, LOW); // Built in LED ON
