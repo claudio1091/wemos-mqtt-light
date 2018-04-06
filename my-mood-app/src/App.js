@@ -2,7 +2,10 @@ import React, { Component } from 'react';
 import logo from './logo.svg';
 import './App.css';
 
-import firebase from './firebase.js';
+import firebase from './commons/firebase.js';
+//import CardTemperature from './components/CardTemperature/CardTemperature';
+//import CardHumidity from './components/CardHumidity/CardHumidity';
+import CardLedStrip from './components/CardLedStrip/CardLedStrip';
 
 class App extends Component {
   state = {
@@ -13,11 +16,11 @@ class App extends Component {
     // Updating the `temperatureNow` local state attribute when the Firebase Realtime Database data
     // under the '/temperatureNow' path changes.
     this.firebaseRef = firebase.database().ref('/temperatureNow');
-    this.firebaseCallback = this.firebaseRef.on('value', (snap) => {      
+    this.firebaseCallback = this.firebaseRef.on('value', snap => {
       this.setState({ temperatureNow: snap.val() });
     });
   }
-  
+
   componentWillUnmount() {
     // Un-register the listener on '/temperatureNow'.
     this.firebaseRef.off('value', this.firebaseCallback);
@@ -26,13 +29,9 @@ class App extends Component {
   render() {
     return (
       <div className="App">
-        <header className="App-header">
-          <img src={logo} className="App-logo" alt="logo" />
-          <h1 className="App-title">Welcome to React</h1>
-        </header>
-        <p className="App-intro">
-          {this.state.temperatureNow}
-        </p>
+        <div className="App-content">
+          <CardLedStrip />
+        </div>
       </div>
     );
   }

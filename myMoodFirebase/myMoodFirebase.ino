@@ -136,7 +136,7 @@ void processLightFirebase(FirebaseObject lightParam) {
   blue = lightParam.getInt("/color/b");
   brightness = lightParam.getInt("/brightness");
   transitionTime = lightParam.getInt("/transition");
-  colorfade = lightParam.getBool("/color-fade");
+  colorfade = lightParam.getBool("/colorFade");
   
   startFade = true;
   inFade = false; // Kill the current fade
