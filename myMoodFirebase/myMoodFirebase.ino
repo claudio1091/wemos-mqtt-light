@@ -13,38 +13,24 @@
 // Set configuration options for LED type, pins, WiFi, and MQTT in the following file:
 #include "config-my-mood.h"
 
-// https://github.com/bblanchon/ArduinoJson
-#include <ArduinoJson.h>
-
 #include <ESP8266WiFi.h>
 #include <FirebaseArduino.h>
-
-// http://pubsubclient.knolleary.net/
-#include <PubSubClient.h>
 
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
 #include <DHT_U.h>
-
-#define DHT_TYPE DHT11 // Update this to match your DHT type
-
-const bool rgb = (CONFIG_STRIP == RGB) || (CONFIG_STRIP == RGBW);
-const bool includeWhite = (CONFIG_STRIP == BRIGHTNESS) || (CONFIG_STRIP == RGBW);
-
-const int BUFFER_SIZE = JSON_OBJECT_SIZE(20);
+#include <Ticker.h>
 
 // Maintained state for reporting to HA
 byte red = 255;
 byte green = 255;
 byte blue = 255;
-byte white = 255;
 byte brightness = 255;
 
 // Real values to write to the LEDs (ex. including brightness and state)
 byte realRed = 0;
 byte realGreen = 0;
 byte realBlue = 0;
-byte realWhite = 0;
 
 bool stateOn = false;
 
@@ -54,19 +40,8 @@ unsigned long lastLoop = 0;
 int transitionTime = 30;
 bool inFade = false;
 int loopCount = 0;
-int stepR, stepG, stepB, stepW;
-int redVal, grnVal, bluVal, whtVal;
-
-// Globals for flash
-bool flash = false;
-bool startFlash = false;
-int flashLength = 50;
-unsigned long flashStartTime = 0;
-byte flashRed = red;
-byte flashGreen = green;
-byte flashBlue = blue;
-byte flashWhite = white;
-byte flashBrightness = brightness;
+int stepR, stepG, stepB;
+int redVal, grnVal, bluVal;
 
 // Globals for colorfade
 bool colorfade = false;
@@ -84,11 +59,12 @@ const byte colors[][4] = {
 };
 const int numColors = 8;
 
-WiFiClient espClient;
-PubSubClient client(espClient);
-
 DHT_Unified dht(CONFIG_DHT_PIN, DHT_TYPE);
 unsigned long lastSampleTime = 0;
+
+Ticker ticker;
+bool publishNewState = true;
+bool lightState = true;
 
 void setup() {
   if (CONFIG_DEBUG) {
@@ -98,13 +74,10 @@ void setup() {
   pinMode(CONFIG_PIN_RED, OUTPUT);
   pinMode(CONFIG_PIN_GREEN, OUTPUT);
   pinMode(CONFIG_PIN_BLUE, OUTPUT);
-  pinMode(CONFIG_PIN_WHITE, OUTPUT);
 
   analogWriteRange(255);
 
   setup_wifi();
-  client.setServer(CONFIG_MQTT_HOST, CONFIG_MQTT_PORT);
-  client.setCallback(callback);
 
   // Set up the DHT sensor
   dht.begin();
@@ -113,6 +86,18 @@ void setup() {
 
   pinMode(BUILTIN_LED, OUTPUT);
   digitalWrite(BUILTIN_LED, LOW); // Built in LED ON
+
+  // Registra o ticker para publicar de tempos em tempos
+  ticker.attach_ms(PUBLISH_INTERVAL, publish);
+  ticker.attach_ms(GET_INTERVAL, getLightState);
+}
+
+void publish() {
+  publishNewState = true;
+}
+
+void getLightState() {
+  lightState = true;
 }
 
 void setup_wifi() {
@@ -136,243 +121,39 @@ void setup_wifi() {
   if (CONFIG_DEBUG) {
     Serial.println("");
     Serial.println("WiFi connected");
-    Serial.println("IP address: ");
+    Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
   }
 
   blinkBuiltInLed(2);
 }
 
-/*
-  SAMPLE PAYLOAD (BRIGHTNESS):
-  {
-    "brightness": 120,
-    "flash": 2,
-    "transition": 5,
-    "state": "ON"
-  }
-
-  SAMPLE PAYLOAD (RGBW):
-  {
-    "brightness": 120,
-    "color": {
-      "r": 255,
-      "g": 100,
-      "b": 100
-    },
-    "white_value": 255,
-    "flash": 2,
-    "transition": 5,
-    "state": "ON",
-    "effect": "colorfade_fast"
-  }
-*/
-void callback(char* topic, byte* payload, unsigned int length) {
-  if (CONFIG_DEBUG) {
-    Serial.print("Message arrived [");
-    Serial.print(topic);
-    Serial.println("] ");
-  }
-
-  char message[length + 1];
-  for (int i = 0; i < length; i++) {
-    message[i] = (char)payload[i];
-  }
-  message[length] = '\0';
-
-  if (CONFIG_DEBUG) {
-    Serial.println(message);
-  }
-
-  if (!processJson(message)) {
-    return;
-  }
-
-  if (stateOn) {
-    // Update lights
-    realRed = map(red, 0, 255, 0, brightness);
-    realGreen = map(green, 0, 255, 0, brightness);
-    realBlue = map(blue, 0, 255, 0, brightness);
-    realWhite = map(white, 0, 255, 0, brightness);
-  } else {
-    realRed = 0;
-    realGreen = 0;
-    realBlue = 0;
-    realWhite = 0;
-  }
-
+void processLightFirebase(FirebaseObject lightParam) {
+  stateOn = lightParam.getBool("/state");
+  
+  red = lightParam.getInt("/color/r");
+  green = lightParam.getInt("/color/g");
+  blue = lightParam.getInt("/color/b");
+  brightness = lightParam.getInt("/brightness");
+  transitionTime = lightParam.getInt("/transition");
+  colorfade = lightParam.getBool("/color-fade");
+  
   startFade = true;
   inFade = false; // Kill the current fade
-
-  sendState();
 }
 
-bool processJson(char* message) {
-  StaticJsonBuffer<BUFFER_SIZE> jsonBuffer;
-
-  JsonObject& root = jsonBuffer.parseObject(message);
-
-  if (!root.success()) {
-    Serial.println("parseObject() failed");
-    return false;
-  }
-
-  if (root.containsKey("state")) {
-    if (strcmp(root["state"], CONFIG_MQTT_PAYLOAD_ON) == 0) {
-      stateOn = true;
-    }
-    else if (strcmp(root["state"], CONFIG_MQTT_PAYLOAD_OFF) == 0) {
-      stateOn = false;
-    }
-  }
-
-  // If "flash" is included, treat RGB and brightness differently
-  if (root.containsKey("flash") ||
-      (root.containsKey("effect") && strcmp(root["effect"], "flash") == 0)) {
-
-    if (root.containsKey("flash")) {
-      flashLength = (int)root["flash"] * 1000;
-    }
-    else {
-      flashLength = CONFIG_DEFAULT_FLASH_LENGTH * 1000;
-    }
-
-    if (root.containsKey("brightness")) {
-      flashBrightness = root["brightness"];
-    }
-    else {
-      flashBrightness = brightness;
-    }
-
-    if (rgb && root.containsKey("color")) {
-      flashRed = root["color"]["r"];
-      flashGreen = root["color"]["g"];
-      flashBlue = root["color"]["b"];
-    }
-    else {
-      flashRed = red;
-      flashGreen = green;
-      flashBlue = blue;
-    }
-
-    flashRed = map(flashRed, 0, 255, 0, flashBrightness);
-    flashGreen = map(flashGreen, 0, 255, 0, flashBrightness);
-    flashBlue = map(flashBlue, 0, 255, 0, flashBrightness);
-
-    flash = true;
-    startFlash = true;
-  } else if (rgb && root.containsKey("effect") &&
-           (strcmp(root["effect"], "colorfade_slow") == 0 || strcmp(root["effect"], "colorfade_fast") == 0)) {
-    
-    flash = false;
-    colorfade = true;
-    currentColor = 0;
-    if (strcmp(root["effect"], "colorfade_slow") == 0) {
-      transitionTime = CONFIG_COLORFADE_TIME_SLOW;
-    }
-    else {
-      transitionTime = CONFIG_COLORFADE_TIME_FAST;
-    }
-  } else if (colorfade && !root.containsKey("color") && root.containsKey("brightness")) {
-    // Adjust brightness during colorfade
-    // (will be applied when fading to the next color)
-    brightness = root["brightness"];
-  } else { //  ==== NO EFFECT ====
-    flash = false;
-    colorfade = false;
-
-    if (rgb && root.containsKey("color")) {
-      red = root["color"]["r"];
-      green = root["color"]["g"];
-      blue = root["color"]["b"];
-    }
-
-    if (root.containsKey("white_value")) {
-      white = root["white_value"];
-    }
-
-    if (root.containsKey("brightness")) {
-      brightness = root["brightness"];
-    }
-
-    if (root.containsKey("transition")) {
-      transitionTime = root["transition"];
-    } else {
-      transitionTime = 30;
-    }
-  }
-
-  return true;
-}
-
-void sendState() {
-  StaticJsonBuffer<BUFFER_SIZE> jsonBuffer;
-
-  JsonObject& root = jsonBuffer.createObject();
-
-  root["state"] = (stateOn) ? CONFIG_MQTT_PAYLOAD_ON : CONFIG_MQTT_PAYLOAD_OFF;
-  
-  JsonObject& color = root.createNestedObject("color");
-  color["r"] = red;
-  color["g"] = green;
-  color["b"] = blue;
-
-  root["brightness"] = brightness;
-  root["white_value"] = white;
-
-  if (rgb && colorfade) {
-    if (transitionTime == CONFIG_COLORFADE_TIME_SLOW) {
-      root["effect"] = "colorfade_slow";
-    } else {
-      root["effect"] = "colorfade_fast";
-    }
-  } else {
-    root["effect"] = "null";
-  }
-
-  char buffer[root.measureLength() + 1];
-  root.printTo(buffer, sizeof(buffer));
-
-  client.publish(CONFIG_MQTT_TOPIC_STATE, buffer, true);
-  blinkBuiltInLed(5);
-}
-
-void reconnect() {
-  // Loop until we're reconnected
-  while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
-    // Attempt to connect
-    // if (client.connect(CONFIG_MQTT_CLIENT_ID, CONFIG_MQTT_USER, CONFIG_MQTT_PASS)) {
-    if (client.connect(CONFIG_MQTT_CLIENT_ID)) {
-      Serial.println("connected");
-      client.subscribe(CONFIG_MQTT_TOPIC_SET);
-    } else {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      delay(5000);
-    }
-  }
-}
-
-void setColor(int inR, int inG, int inB, int inW) {
+void setColor(int inR, int inG, int inB) {
   blinkBuiltInLed(3);
 
   if (CONFIG_INVERT_LED_LOGIC) {
     inR = (255 - inR);
     inG = (255 - inG);
     inB = (255 - inB);
-    inW = (255 - inW);
   }
 
   analogWrite(CONFIG_PIN_RED, inR);
   analogWrite(CONFIG_PIN_GREEN, inG);
   analogWrite(CONFIG_PIN_BLUE, inB);
-
-  if (inW > -1) {
-    analogWrite(CONFIG_PIN_WHITE, inW);
-  }
 
   if (CONFIG_DEBUG) {
     Serial.print("Setting LEDs: {");
@@ -384,66 +165,35 @@ void setColor(int inR, int inG, int inB, int inW) {
     Serial.print(" , b: ");
     Serial.print(inB);
 
-    Serial.print(", ");
-    Serial.print("w: ");
-    Serial.print(inW);
-
     Serial.println("}");
   }
 }
 
 void loop() {
-  if (!client.connected()) {
-    reconnect();
-  }
+  // Apenas publique quando passar o tempo determinado
+  if (publishNewState) {
+    Serial.println("Publish new State");
 
-  client.loop();
+    // Obtem os dados do sensor DHT 
+    float humidity = dht.readHumidity();
+    float temperature = dht.readTemperature();
 
-  unsigned long currentMillis = millis();
-  float humidity, celsius;
-
-  if (currentMillis - lastSampleTime > CONFIG_DHT_SAMPLE_DELAY) {
-    lastSampleTime = currentMillis;
-
-    sensors_event_t event;
-    dht.temperature().getEvent(&event);
-    if (isnan(event.temperature)) {
-      Serial.println("Error reading temperature!");
+    if (!isnan(humidity) && !isnan(temperature)) {
+      // Manda para o firebase
+      Firebase.pushFloat("temperature", temperature);
+      Firebase.pushFloat("humidity", humidity);    
+      publishNewState = false;
     } else {
-      celsius = event.temperature;
-      client.publish(CONFIG_MQTT_TOPIC_TEMP, String(celsius).c_str());
-    }
-
-    // Get humidity event and print its value.
-    dht.humidity().getEvent(&event);
-    if (isnan(event.relative_humidity)) {
-      Serial.println("Error reading humidity!");
-    } else {
-      humidity = event.relative_humidity;
-      client.publish(CONFIG_MQTT_TOPIC_HUMID, String(humidity).c_str());
+      Serial.println("Error Publishing");
     }
   }
 
-  if (flash) {
-    if (startFlash) {
-      startFlash = false;
-      flashStartTime = millis();
-    }
+  if (lightState) {
+    FirebaseObject lightParam = Firebase.get("/rgbstrip");
+    processLightFirebase(lightParam);
+  }
 
-    if ((millis() - flashStartTime) <= flashLength) {
-      if ((millis() - flashStartTime) % 1000 <= 500) {
-        setColor(flashRed, flashGreen, flashBlue, -1);
-      } else {
-        setColor(0, 0, 0, -1);
-        // If you'd prefer the flashing to happen "on top of"
-        // the current color, uncomment the next line.
-        // setColor(realRed, realGreen, realBlue, realWhite);
-      }
-    } else {
-      flash = false;
-      setColor(realRed, realGreen, realBlue, realWhite);
-    }
-  } else if (rgb && colorfade && !inFade) {
+  if (colorfade && !inFade) {
     realRed = map(colors[currentColor][0], 0, 255, 0, brightness);
     realGreen = map(colors[currentColor][1], 0, 255, 0, brightness);
     realBlue = map(colors[currentColor][2], 0, 255, 0, brightness);
@@ -454,12 +204,11 @@ void loop() {
   if (startFade) {
     // If we don't want to fade, skip it.
     if (transitionTime == 0) {
-      setColor(realRed, realGreen, realBlue, realWhite);
+      setColor(realRed, realGreen, realBlue);
 
       redVal = realRed;
       grnVal = realGreen;
       bluVal = realBlue;
-      whtVal = realWhite;
 
       startFade = false;
     } else {
@@ -467,7 +216,6 @@ void loop() {
       stepR = calculateStep(redVal, realRed);
       stepG = calculateStep(grnVal, realGreen);
       stepB = calculateStep(bluVal, realBlue);
-      stepW = calculateStep(whtVal, realWhite);
 
       inFade = true;
     }
@@ -483,9 +231,8 @@ void loop() {
         redVal = calculateVal(stepR, redVal, loopCount);
         grnVal = calculateVal(stepG, grnVal, loopCount);
         bluVal = calculateVal(stepB, bluVal, loopCount);
-        whtVal = calculateVal(stepW, whtVal, loopCount);
 
-        setColor(redVal, grnVal, bluVal, whtVal); // Write current values to LED pins
+        setColor(redVal, grnVal, bluVal); // Write current values to LED pins
 
         if (CONFIG_DEBUG) {
           Serial.print("Loop count: ");

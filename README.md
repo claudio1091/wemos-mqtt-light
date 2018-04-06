@@ -8,6 +8,7 @@ Use the Wemos D1 R1 to provide a temperature and humidity information and contro
 
 ### Dependencies
 [Arduino Firebase](https://github.com/firebase/firebase-arduino)
+**Ticker**
 
 
 yarn start

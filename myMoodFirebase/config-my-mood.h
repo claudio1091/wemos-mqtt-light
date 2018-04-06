@@ -1,19 +1,3 @@
-/*
- * This is a sample configuration file for the "mqtt_esp8266" light.
- *
- * Change the settings below and save the file as "config.h"
- * You can then upload the code using the Arduino IDE.
- */
-
-// Leave this here. These are the choices for CONFIG_STRIP below.
-enum strip {
-  BRIGHTNESS, // only one color/only white
-  RGB,        // RGB LEDs
-  RGBW        // RGB LEDs with an extra white LED per LED
-};
-
-#define CONFIG_STRIP RGB // Choose one of the options from above.
-
 // Pins
 // In case of BRIGHTNESS: only WHITE is used
 // In case of RGB(W): red, green, blue(, white) is used
@@ -22,41 +6,23 @@ enum strip {
 #define CONFIG_PIN_RED   13  // For RGB(W)
 #define CONFIG_PIN_GREEN 14  // For RGB(W)
 #define CONFIG_PIN_BLUE  12  // For RGB(W)
-#define CONFIG_PIN_WHITE -1 // For BRIGHTNESS and RGBW
 
 // DHT
 // Define the DHT type in the code file.
 #define CONFIG_DHT_PIN 16
-#define CONFIG_DHT_SAMPLE_DELAY 30000 // Milliseconds between readings
+#define DHT_TYPE DHT11 // Update this to match your DHT type
 
 // WiFi
 #define CONFIG_WIFI_SSID "{WIFI-SSID}"
 #define CONFIG_WIFI_PASS "{WIFI-PASSWORD}"
+
 #define FIREBASE_HOST "https://my-mood-a16e2.firebaseio.com/"
 #define FIREBASE_AUTH "XI16Hf2dp7Mxpr6j5CCXhziczX9AixXSkT9z2n3y"
 
-// MQTT
-#define CONFIG_MQTT_HOST "{MQTT-HOST}"
-#define CONFIG_MQTT_PORT 1883 // Usually 1883
-#define CONFIG_MQTT_USER "{MQTT-USERNAME}"
-#define CONFIG_MQTT_PASS "{MQTT-PASSWORD}"
-#define CONFIG_MQTT_CLIENT_ID "{MQTT-CLIENT-ID}" // Must be unique on the MQTT network
-
-// MQTT Topics
-#define CONFIG_MQTT_TOPIC_STATE "my-mood/lights"
-#define CONFIG_MQTT_TOPIC_SET "my-mood/lights/set"
-#define CONFIG_MQTT_TOPIC_TEMP "my-mood/temperature"
-#define CONFIG_MQTT_TOPIC_HUMID "my-mood/humidity"
-
-#define CONFIG_MQTT_PAYLOAD_ON "ON"
-#define CONFIG_MQTT_PAYLOAD_OFF "OFF"
-
-// Miscellaneous
-// Default number of flashes if no value was given
-#define CONFIG_DEFAULT_FLASH_LENGTH 50
-// Number of seconds for one transition in colorfade mode
-#define CONFIG_COLORFADE_TIME_SLOW 15
-#define CONFIG_COLORFADE_TIME_FAST 3
+// Publique a cada 5 min
+#define PUBLISH_INTERVAL 1000*60*5
+// Get a cada 30 segundos
+#define GET_INTERVAL 1000*30
 
 // Reverse the LED logic
 // false: 0 (off) - 255 (bright)
