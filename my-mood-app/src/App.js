@@ -3,8 +3,8 @@ import logo from './logo.svg';
 import './App.css';
 
 import firebase from './commons/firebase.js';
-//import CardTemperature from './components/CardTemperature/CardTemperature';
-//import CardHumidity from './components/CardHumidity/CardHumidity';
+import CardTemperature from './components/CardTemperature/CardTemperature';
+import CardHumidity from './components/CardHumidity/CardHumidity';
 import CardLedStrip from './components/CardLedStrip/CardLedStrip';
 
 class App extends Component {
@@ -29,6 +29,10 @@ class App extends Component {
   render() {
     return (
       <div className="App">
+        <div className="App-content">
+          <CardTemperature />
+          <CardHumidity />
+        </div>
         <div className="App-content">
           <CardLedStrip />
         </div>

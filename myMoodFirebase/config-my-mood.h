@@ -13,16 +13,16 @@
 #define DHT_TYPE DHT11 // Update this to match your DHT type
 
 // WiFi
-#define CONFIG_WIFI_SSID "{WIFI-SSID}"
-#define CONFIG_WIFI_PASS "{WIFI-PASSWORD}"
+#define CONFIG_WIFI_SSID "VASCONCELOS"
+#define CONFIG_WIFI_PASS "vasC@84#"
 
-#define FIREBASE_HOST "https://my-mood-a16e2.firebaseio.com/"
-#define FIREBASE_AUTH "XI16Hf2dp7Mxpr6j5CCXhziczX9AixXSkT9z2n3y"
+#define FIREBASE_HOST "my-mood-a16e2.firebaseio.com"
+#define FIREBASE_AUTH "RcAQZDy5GiTIvIubHuVz48srXP0J36CKJnYquA1i"
 
 // Publique a cada 5 min
 #define PUBLISH_INTERVAL 1000*60*5
 // Get a cada 30 segundos
-#define GET_INTERVAL 1000*30
+#define GET_INTERVAL 1000*10
 
 // Reverse the LED logic
 // false: 0 (off) - 255 (bright)

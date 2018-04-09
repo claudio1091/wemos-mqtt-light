@@ -1,7 +1,49 @@
 .Card {
   display: flex;
   flex-grow: 1;
+  flex-direction: column;
+  justify-content: space-between;
+  background-color: #F5F5F6;
+  box-shadow: 1px 6px 15px 0px rgba(0,0,0,0.35);
+  min-height: 250px;
+}
+
+.Card-short {
+  min-width: 45%;
+  max-width: 45%;
+  width: 45%;
+}
+
+.Card-title {
+  font-weight: bold;
+  padding: 25px 5px 15px 5px;
+  background-color: #283593;
+  color: #fff;
+  font-size: 1.1em;
   flex-direction: row;
-  background-color: aqua;
-  border: 1px solid #888;
+  align-items: center;
+  align-content: center;
+}
+
+.Card-footer {
+  color: #90A4AE;
+  font-size: .8em;
+  padding: 10px 5px;
+}
+
+.Card-content {
+  padding: 15px;
+}
+
+.Card-content span.highlight {
+  font-size: 4em;
+}
+
+.Card-content-flex {
+  display: flex;
+  flex-direction: row;
+}
+
+.Card-content .Card-column {
+  flex-direction: column;
 }

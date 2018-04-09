@@ -19,7 +19,6 @@
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
 #include <DHT_U.h>
-#include <Ticker.h>
 
 // Maintained state for reporting to HA
 byte red = 255;
@@ -61,8 +60,8 @@ const int numColors = 8;
 
 DHT_Unified dht(CONFIG_DHT_PIN, DHT_TYPE);
 unsigned long lastSampleTime = 0;
+unsigned long lastSampleTimeLights = 0;
 
-Ticker ticker;
 bool publishNewState = true;
 bool lightState = true;
 
@@ -86,18 +85,6 @@ void setup() {
 
   pinMode(BUILTIN_LED, OUTPUT);
   digitalWrite(BUILTIN_LED, LOW); // Built in LED ON
-
-  // Registra o ticker para publicar de tempos em tempos
-  ticker.attach_ms(PUBLISH_INTERVAL, publish);
-  ticker.attach_ms(GET_INTERVAL, getLightState);
-}
-
-void publish() {
-  publishNewState = true;
-}
-
-void getLightState() {
-  lightState = true;
 }
 
 void setup_wifi() {
@@ -130,16 +117,27 @@ void setup_wifi() {
 
 void processLightFirebase(FirebaseObject lightParam) {
   stateOn = lightParam.getBool("/state");
-  
+
   red = lightParam.getInt("/color/r");
   green = lightParam.getInt("/color/g");
   blue = lightParam.getInt("/color/b");
   brightness = lightParam.getInt("/brightness");
   transitionTime = lightParam.getInt("/transition");
   colorfade = lightParam.getBool("/colorFade");
-  
+
   startFade = true;
   inFade = false; // Kill the current fade
+
+  if (stateOn) {
+    // Update lights
+    realRed = map(red, 0, 255, 0, brightness);
+    realGreen = map(green, 0, 255, 0, brightness);
+    realBlue = map(blue, 0, 255, 0, brightness);
+  } else {
+    realRed = 0;
+    realGreen = 0;
+    realBlue = 0;
+  }
 }
 
 void setColor(int inR, int inG, int inB) {
@@ -155,7 +153,7 @@ void setColor(int inR, int inG, int inB) {
   analogWrite(CONFIG_PIN_GREEN, inG);
   analogWrite(CONFIG_PIN_BLUE, inB);
 
-  if (CONFIG_DEBUG) {
+  /*if (CONFIG_DEBUG) {
     Serial.print("Setting LEDs: {");
 
     Serial.print("r: ");
@@ -166,29 +164,47 @@ void setColor(int inR, int inG, int inB) {
     Serial.print(inB);
 
     Serial.println("}");
-  }
+    }*/
 }
 
 void loop() {
   // Apenas publique quando passar o tempo determinado
-  if (publishNewState) {
+  unsigned long currentMillis = millis();
+  if (lastSampleTime == 0 || (currentMillis - lastSampleTime > PUBLISH_INTERVAL)) {
+    lastSampleTime = currentMillis;
+    DynamicJsonBuffer jsonBuffer;
     Serial.println("Publish new State");
 
-    // Obtem os dados do sensor DHT 
-    float humidity = dht.readHumidity();
-    float temperature = dht.readTemperature();
+    sensors_event_t event;
+    dht.temperature().getEvent(&event);
+    float temperature = event.temperature;
+
+    dht.humidity().getEvent(&event);
+    float humidity = event.relative_humidity;
+
+    // Push to Firebase
+    JsonObject& temperatureObject = jsonBuffer.createObject();
+    JsonObject& tempTime = temperatureObject.createNestedObject("timestamp");
+    temperatureObject["temperature"] = temperature;
+    temperatureObject["humidity"] = humidity;
+    tempTime[".sv"] = "timestamp";
 
     if (!isnan(humidity) && !isnan(temperature)) {
       // Manda para o firebase
-      Firebase.pushFloat("temperature", temperature);
-      Firebase.pushFloat("humidity", humidity);    
-      publishNewState = false;
+      Firebase.push("/tempHum", temperatureObject);
+      // handle error
+      if (Firebase.failed()) {
+        Serial.print("pushing /temperature failed:");
+        Serial.println(Firebase.error());
+      }
     } else {
       Serial.println("Error Publishing");
     }
   }
 
-  if (lightState) {
+  currentMillis = millis();
+  if (lastSampleTimeLights == 0 || (currentMillis - lastSampleTimeLights > GET_INTERVAL)) {
+    lastSampleTimeLights = currentMillis;
     FirebaseObject lightParam = Firebase.get("/rgbstrip");
     processLightFirebase(lightParam);
   }
@@ -235,8 +251,8 @@ void loop() {
         setColor(redVal, grnVal, bluVal); // Write current values to LED pins
 
         if (CONFIG_DEBUG) {
-          Serial.print("Loop count: ");
-          Serial.println(loopCount);
+          //Serial.print("Loop count: ");
+          //Serial.println(loopCount);
         }
 
         loopCount++;
