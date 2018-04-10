@@ -26,12 +26,14 @@ enum strip {
 
 // DHT
 // Define the DHT type in the code file.
-#define CONFIG_DHT_PIN 4
+#define CONFIG_DHT_PIN 16
 #define CONFIG_DHT_SAMPLE_DELAY 30000 // Milliseconds between readings
 
 // WiFi
 #define CONFIG_WIFI_SSID "{WIFI-SSID}"
 #define CONFIG_WIFI_PASS "{WIFI-PASSWORD}"
+#define FIREBASE_HOST ""
+#define FIREBASE_AUTH ""
 
 // MQTT
 #define CONFIG_MQTT_HOST "{MQTT-HOST}"
@@ -41,19 +43,19 @@ enum strip {
 #define CONFIG_MQTT_CLIENT_ID "{MQTT-CLIENT-ID}" // Must be unique on the MQTT network
 
 // MQTT Topics
-#define CONFIG_MQTT_TOPIC_STATE "home/bedroom/lights"
-#define CONFIG_MQTT_TOPIC_SET "home/bedroom/lights/set"
-#define CONFIG_MQTT_TOPIC_TEMP "home/bedroom/temperature"
-#define CONFIG_MQTT_TOPIC_HUMID "home/bedroom/humidity"
+#define CONFIG_MQTT_TOPIC_STATE "my-mood/lights"
+#define CONFIG_MQTT_TOPIC_SET "my-mood/lights/set"
+#define CONFIG_MQTT_TOPIC_TEMP "my-mood/temperature"
+#define CONFIG_MQTT_TOPIC_HUMID "my-mood/humidity"
 
 #define CONFIG_MQTT_PAYLOAD_ON "ON"
 #define CONFIG_MQTT_PAYLOAD_OFF "OFF"
 
 // Miscellaneous
 // Default number of flashes if no value was given
-#define CONFIG_DEFAULT_FLASH_LENGTH 2
+#define CONFIG_DEFAULT_FLASH_LENGTH 50
 // Number of seconds for one transition in colorfade mode
-#define CONFIG_COLORFADE_TIME_SLOW 10
+#define CONFIG_COLORFADE_TIME_SLOW 15
 #define CONFIG_COLORFADE_TIME_FAST 3
 
 // Reverse the LED logic
