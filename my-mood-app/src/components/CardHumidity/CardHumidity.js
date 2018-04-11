@@ -39,7 +39,7 @@ export default class CardHumidity extends Component {
         </div>
         <div className="Card-footer">
           <div>
-            Last Update: {moment(this.state.lastUpdate).format('HH:mm:ss')}
+            Last Update: {moment(this.state.lastUpdate).fromNow()}
           </div>
         </div>
       </div>
